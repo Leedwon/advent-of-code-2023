@@ -129,6 +129,7 @@ private fun generateAllStrings(
     )
 }
 
+// Brute forcing part1
 private fun calculateNumberOfPossibilities(spring: String, springData: List<Int>): Int {
     val unknownIndices = spring.mapIndexed { index, c -> index to c }.filter { it.second == '?' }.map { it.first }
     val combinations = mutableListOf<String>()
