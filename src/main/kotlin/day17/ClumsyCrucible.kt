@@ -11,6 +11,7 @@ typealias Coordinate = Pair<Int, Int>
 data class Node(
     val coordinate: Coordinate,
     val cost: Int,
+    val path: List<Coordinate> = listOf(),
     val moves: List<Coordinate> = listOf()
 )
 
@@ -19,59 +20,104 @@ fun solveDay171(fileName: String): Int {
     val map = loadMap(fileName)
 
     val queue = PriorityQueue<Node>(Comparator.comparing { it.cost })
-    map.keys
-        .map { Node(coordinate = it, cost = if (it == 0 to 0) 0 else Int.MAX_VALUE) }
-        .let { queue.addAll(it) }
+
+    for (coordinate in map.keys) {
+        // all combinations of >>> >>v etc
+        for (m in 0..63) {
+            var runningCoordinate = coordinate
+            val moves = m
+                .toMoves()
+                .takeWhile {
+                    runningCoordinate += it
+                    map[runningCoordinate] != null
+                }
+            if (moves.isNotEmpty()) {
+                queue.add(
+                    Node(
+                        coordinate = coordinate,
+                        cost = if (coordinate == 0 to 0) 0 else MAX_COST,
+                        moves = moves
+                    )
+                )
+            }
+        }
+    }
 
     val visitedNodes = mutableListOf<Node>()
 
     while (queue.isNotEmpty()) {
         val current = queue.remove()
+        var runningCost = current.cost
+        var runningCoordinate = current.coordinate
+        var path = current.path
 
-        val neighbours = listOf(
-            1 to 0, // right
-            -1 to 0, // left
-            0 to 1, // bottom
-            0 to -1 // top
-        )
-            .map { it to (it + current.coordinate) }
-            .filter { (_, neighbour) -> visitedNodes.none { it.coordinate == neighbour } && map[neighbour] != null }
-
-        for ((move, neighbour) in neighbours) {
-            val cost = map[neighbour]!! // null safe cause of filter
-            val isMoveAllowed = current.moves.isMoveAllowed(move)
-            val newCost = if (isMoveAllowed) current.cost + cost else Int.MAX_VALUE
-            val element =
-                queue.find { it.coordinate == neighbour } ?: error("Couldn't find element with $neighbour for $current")
-            if (newCost < element.cost) {
-                println("updating cost for ${element.coordinate} from ${element.cost} to $newCost")
-                // remove and add so queue keeps order, plus we inform which move was taken
-                queue.remove(element)
-                val moves = current.moves + listOf(move)
-                queue.add(Node(coordinate = neighbour, cost = newCost, moves = moves))
+        for (move in current.moves) {
+            runningCoordinate += move
+            path = path + listOf(move)
+            val isMoveAllowed = path.isEndingValid()
+            val cost = map[runningCoordinate]
+            if (cost == null || !isMoveAllowed) break
+            runningCost += cost
+            val elements = queue.filter { it.coordinate == runningCoordinate }
+            for (element in elements) {
+                if (element.cost > runningCost) {
+                    // remove and add so queue keeps order, plus we inform which move was taken
+                    queue.remove(element)
+                    queue.add(
+                        Node(
+                            coordinate = element.coordinate,
+                            cost = runningCost,
+                            path = path,
+                            moves = element.moves
+                        )
+                    )
+                }
             }
         }
-
         visitedNodes.add(current)
     }
 
     val lastColumn = map.keys.maxOf { it.first }
     val lastRow = map.keys.maxOf { it.second }
 
-    val lastNode = visitedNodes.first { it.coordinate == (lastColumn to lastRow) }
+    val lastNode = visitedNodes.filter { it.coordinate == (lastColumn to lastRow) }.minBy { it.cost }
 
-    map.prettyPrint(lastNode.moves)
+    map.prettyPrint(lastNode.path)
+    println("----------------")
 
     return lastNode.cost
 }
 
 private fun List<Coordinate>.isMoveAllowed(move: Coordinate): Boolean {
     // maximum last 3 moves can be made in the same direction
-    return size < 3 || takeLast(3).any { it != move }
+    return size < 2 || takeLast(2).any { it != move }
+}
+
+private fun List<Coordinate>.isEndingValid(): Boolean {
+    return size < 3 || takeLast(3).any { it != last() }
 }
 
 fun solveDay172(fileName: String): Int {
     return 0
+}
+
+private fun Int.toMoves(): List<Coordinate> {
+    val first = this.and(0b000011).toMove()
+    val second = this.and(0b001100).shr(2).toMove()
+    val third = this.and(0b1100000).shr(4).toMove()
+
+    return listOf(first, second, third)
+}
+
+private fun Int.toMove(): Coordinate {
+    // 00 -> >, 01 -> <, 10 -> ^, 11 -> v
+    return when (this) {
+        0b00 -> 1 to 0 // right
+        0b01 -> -1 to 0 // left
+        0b10 -> 0 to -1 // up
+        0b11 -> 0 to 1 // down
+        else -> error("Invalid move $this")
+    }
 }
 
 private fun loadMap(fileName: String): Map<Coordinate, Int> {
@@ -87,13 +133,19 @@ private fun loadMap(fileName: String): Map<Coordinate, Int> {
     return map
 }
 
+const val MAX_COST =
+    10_000 // the costs in data are not that big, and we don't use Int.MAX_VALUE as sometimes max costs will be added
+
 private fun Map<Coordinate, Int>.prettyPrint(
     moves: List<Coordinate>
 ) {
     val start = Coordinate(0, 0) + moves.first()
-    val path = moves.fold(listOf(start)) { acc, coordinate ->
+    val path = moves.drop(1).fold(listOf(start)) { acc, coordinate ->
         acc + listOf(acc.last() + coordinate)
     }
+
+    println("path = ")
+    path.chunked(10).forEach { println(it) }
 
     val columns = keys.maxOf { it.first }
     val rows = keys.maxOf { it.second }
