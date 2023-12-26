@@ -23,7 +23,7 @@ fun solveDay171(fileName: String): Int {
 
     for (coordinate in map.keys) {
         // all combinations of >>> >>v etc
-        for (m in 0..63) {
+        for (m in 0..127) {
             var runningCoordinate = coordinate
             val moves = m
                 .toMoves()
@@ -31,7 +31,7 @@ fun solveDay171(fileName: String): Int {
                     runningCoordinate += it
                     map[runningCoordinate] != null
                 }
-            if (moves.isNotEmpty()) {
+            if (moves.isNotEmpty() && moves.isEndingValid() && moves.areValid()) {
                 queue.add(
                     Node(
                         coordinate = coordinate,
@@ -45,13 +45,21 @@ fun solveDay171(fileName: String): Int {
 
     val visitedNodes = mutableListOf<Node>()
 
+    var moves = 0
     while (queue.isNotEmpty()) {
+//        if(moves++ % 100 == 0) {
+//            map.debugPrint(visitedNodes + queue)
+//        }
         val current = queue.remove()
         var runningCost = current.cost
         var runningCoordinate = current.coordinate
         var path = current.path
 
         for (move in current.moves) {
+//            if(runningCoordinate.first == 12 && runningCoordinate.second > 11) {
+//                map.prettyPrint(path)
+//                println("stop $runningCoordinate")
+//            }
             runningCoordinate += move
             path = path + listOf(move)
             val isMoveAllowed = path.isEndingValid()
@@ -93,8 +101,9 @@ private fun List<Coordinate>.isMoveAllowed(move: Coordinate): Boolean {
     return size < 2 || takeLast(2).any { it != move }
 }
 
+// max 3 consecutive
 private fun List<Coordinate>.isEndingValid(): Boolean {
-    return size < 3 || takeLast(3).any { it != last() }
+    return size < 4 || takeLast(4).any { it != last() }
 }
 
 fun solveDay172(fileName: String): Int {
@@ -102,11 +111,25 @@ fun solveDay172(fileName: String): Int {
 }
 
 private fun Int.toMoves(): List<Coordinate> {
-    val first = this.and(0b000011).toMove()
-    val second = this.and(0b001100).shr(2).toMove()
-    val third = this.and(0b1100000).shr(4).toMove()
+    val first = this.and(0b00000011).toMove()
+    val second = this.and(0b00001100).shr(2).toMove()
+    val third = this.and(0b00110000).shr(4).toMove()
+    val forth = this.and(0b11000000).shr(6).toMove()
 
-    return listOf(first, second, third)
+    return listOf(first, second, third, forth)
+}
+
+private fun List<Coordinate>.areValid() : Boolean {
+    return zipWithNext { a, b ->
+        when(a) {
+            1 to 0 -> b != -1 to 0
+            -1 to 0 -> b != 1 to 0
+            0 to 1 -> b != 0 to -1
+            0 to -1 -> b != 0 to 1
+            else -> error("error")
+        }
+    }
+        .all { it }
 }
 
 private fun Int.toMove(): Coordinate {
@@ -175,6 +198,27 @@ private fun Map<Coordinate, Int>.prettyPrint(
         }
         print("\n")
     }
+}
+
+private fun Map<Coordinate, Int>.debugPrint(
+    nodes: List<Node>
+) {
+    val columns = keys.maxOf { it.first }
+    val rows = keys.maxOf { it.second }
+
+    for (row in 0..rows) {
+        for (column in 0..columns) {
+            val node = nodes.first { it.coordinate == column to row }
+            if (node.cost == MAX_COST) {
+                print("x,")
+            } else {
+                print("${node.cost},")
+            }
+
+        }
+        print("\n")
+    }
+    println("--------------------------------------------------")
 }
 
 private operator fun Pair<Int, Int>.plus(other: Pair<Int, Int>): Pair<Int, Int> {
