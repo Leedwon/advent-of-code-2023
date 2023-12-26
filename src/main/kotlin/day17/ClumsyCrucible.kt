@@ -109,8 +109,6 @@ private fun Node.next(
     }
 }
 
-private const val MAX_MOVES_IN_LINE = 3
-
 private fun loadMap(fileName: String): Map<Coordinate, Int> {
     val lines = readFileLines(fileName)
     val map = mutableMapOf<Coordinate, Int>()
