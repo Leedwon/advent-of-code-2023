@@ -101,7 +101,7 @@ private fun Node.next(
                 add(copy(coordinate = coordinate + move, movesInLine = movesInLine + 1))
             }
             val left = move.second to move.first // (1,0) turns into (0,1)
-            val right = -move.second to -move.first // (0, 1) turns int (-1,0)
+            val right = -move.second to -move.first // (0, 1) turns into (-1,0)
 
             add(copy(coordinate = coordinate + left, move = left, movesInLine = 1))
             add(copy(coordinate = coordinate + right, move = right, movesInLine = 1))
