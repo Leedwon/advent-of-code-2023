@@ -10,138 +10,106 @@ typealias Coordinate = Pair<Int, Int>
 
 data class Node(
     val coordinate: Coordinate,
-    val cost: Int,
-    val path: List<Coordinate> = listOf(),
-    val moves: List<Coordinate> = listOf()
+    val move: Coordinate,
+    val movesInLine: Int
+)
+
+data class NodeWithCost(
+    val node: Node,
+    val cost: Int
 )
 
 // we have to reconsider the last 3 moves because it can open other possibilities
 fun solveDay171(fileName: String): Int {
     val map = loadMap(fileName)
 
-    val queue = PriorityQueue<Node>(Comparator.comparing { it.cost })
+    return calculateHeatLoss(
+        map = map,
+        startingNodes = listOf(
+            NodeWithCost(node = Node(coordinate = 0 to 0, move = 1 to 0, movesInLine = 0), cost = 0),
+            NodeWithCost(node = Node(coordinate = 0 to 0, move = 0 to 1, movesInLine = 0), cost = 0),
+        ),
+        minInLine = 0,
+        maxInLine = 3
+    )
+}
 
-    for (coordinate in map.keys) {
-        // all combinations of >>> >>v etc
-        for (m in 0..127) {
-            var runningCoordinate = coordinate
-            val moves = m
-                .toMoves()
-                .takeWhile {
-                    runningCoordinate += it
-                    map[runningCoordinate] != null
-                }
-            if (moves.isNotEmpty() && moves.isEndingValid() && moves.areValid()) {
-                queue.add(
-                    Node(
-                        coordinate = coordinate,
-                        cost = if (coordinate == 0 to 0) 0 else MAX_COST,
-                        moves = moves
-                    )
-                )
-            }
-        }
+fun solveDay172(fileName: String): Int {
+    val map = loadMap(fileName)
+
+    return calculateHeatLoss(
+        map = map,
+        startingNodes = listOf(
+            NodeWithCost(node = Node(coordinate = 0 to 0, move = 1 to 0, movesInLine = 0), cost = 0),
+            NodeWithCost(node = Node(coordinate = 0 to 0, move = 0 to 1, movesInLine = 0), cost = 0),
+        ),
+        minInLine = 4,
+        maxInLine = 10
+    )
+}
+
+private fun calculateHeatLoss(
+    map: Map<Coordinate, Int>,
+    startingNodes: List<NodeWithCost>,
+    minInLine: Int,
+    maxInLine: Int
+): Int {
+    val costs = mutableMapOf<Node, Int>().withDefault { Int.MAX_VALUE }
+    val queue = PriorityQueue<NodeWithCost>(Comparator.comparing { it.cost })
+
+    startingNodes.forEach {
+        costs[it.node] = 0
     }
 
-    val visitedNodes = mutableListOf<Node>()
+    queue.addAll(startingNodes)
 
-    var moves = 0
     while (queue.isNotEmpty()) {
-//        if(moves++ % 100 == 0) {
-//            map.debugPrint(visitedNodes + queue)
-//        }
         val current = queue.remove()
-        var runningCost = current.cost
-        var runningCoordinate = current.coordinate
-        var path = current.path
 
-        for (move in current.moves) {
-//            if(runningCoordinate.first == 12 && runningCoordinate.second > 11) {
-//                map.prettyPrint(path)
-//                println("stop $runningCoordinate")
-//            }
-            runningCoordinate += move
-            path = path + listOf(move)
-            val isMoveAllowed = path.isEndingValid()
-            val cost = map[runningCoordinate]
-            if (cost == null || !isMoveAllowed) break
-            runningCost += cost
-            val elements = queue.filter { it.coordinate == runningCoordinate }
-            for (element in elements) {
-                if (element.cost > runningCost) {
-                    // remove and add so queue keeps order, plus we inform which move was taken
-                    queue.remove(element)
+        current.node.next(minInLine = minInLine, maxInLine = maxInLine)
+            .filter { map[it.coordinate] != null }
+            .forEach { next ->
+                val cost = current.cost + map[next.coordinate]!!
+                if (cost < costs.getValue(next)) {
+                    costs[next] = cost
                     queue.add(
-                        Node(
-                            coordinate = element.coordinate,
-                            cost = runningCost,
-                            path = path,
-                            moves = element.moves
+                        NodeWithCost(
+                            node = next,
+                            cost = cost
                         )
                     )
                 }
+
             }
-        }
-        visitedNodes.add(current)
     }
 
     val lastColumn = map.keys.maxOf { it.first }
     val lastRow = map.keys.maxOf { it.second }
 
-    val lastNode = visitedNodes.filter { it.coordinate == (lastColumn to lastRow) }.minBy { it.cost }
-
-    map.prettyPrint(lastNode.path)
-    println("----------------")
-
-    return lastNode.cost
+    return costs.keys.filter { it.coordinate == lastColumn to lastRow }.mapNotNull { costs[it] }.min()
 }
 
-private fun List<Coordinate>.isMoveAllowed(move: Coordinate): Boolean {
-    // maximum last 3 moves can be made in the same direction
-    return size < 2 || takeLast(2).any { it != move }
-}
+private fun Node.next(
+    minInLine: Int,
+    maxInLine: Int
+): List<Node> {
+    return if (movesInLine < minInLine) {
+        listOf(copy(coordinate = coordinate + move, movesInLine = movesInLine + 1))
+    } else {
+        buildList {
+            if (movesInLine < maxInLine) {
+                add(copy(coordinate = coordinate + move, movesInLine = movesInLine + 1))
+            }
+            val left = move.second to move.first // (1,0) turns into (0,1)
+            val right = -move.second to -move.first // (0, 1) turns int (-1,0)
 
-// max 3 consecutive
-private fun List<Coordinate>.isEndingValid(): Boolean {
-    return size < 4 || takeLast(4).any { it != last() }
-}
-
-fun solveDay172(fileName: String): Int {
-    return 0
-}
-
-private fun Int.toMoves(): List<Coordinate> {
-    val first = this.and(0b00000011).toMove()
-    val second = this.and(0b00001100).shr(2).toMove()
-    val third = this.and(0b00110000).shr(4).toMove()
-    val forth = this.and(0b11000000).shr(6).toMove()
-
-    return listOf(first, second, third, forth)
-}
-
-private fun List<Coordinate>.areValid() : Boolean {
-    return zipWithNext { a, b ->
-        when(a) {
-            1 to 0 -> b != -1 to 0
-            -1 to 0 -> b != 1 to 0
-            0 to 1 -> b != 0 to -1
-            0 to -1 -> b != 0 to 1
-            else -> error("error")
+            add(copy(coordinate = coordinate + left, move = left, movesInLine = 1))
+            add(copy(coordinate = coordinate + right, move = right, movesInLine = 1))
         }
     }
-        .all { it }
 }
 
-private fun Int.toMove(): Coordinate {
-    // 00 -> >, 01 -> <, 10 -> ^, 11 -> v
-    return when (this) {
-        0b00 -> 1 to 0 // right
-        0b01 -> -1 to 0 // left
-        0b10 -> 0 to -1 // up
-        0b11 -> 0 to 1 // down
-        else -> error("Invalid move $this")
-    }
-}
+private const val MAX_MOVES_IN_LINE = 3
 
 private fun loadMap(fileName: String): Map<Coordinate, Int> {
     val lines = readFileLines(fileName)
@@ -154,71 +122,6 @@ private fun loadMap(fileName: String): Map<Coordinate, Int> {
     }
 
     return map
-}
-
-const val MAX_COST =
-    10_000 // the costs in data are not that big, and we don't use Int.MAX_VALUE as sometimes max costs will be added
-
-private fun Map<Coordinate, Int>.prettyPrint(
-    moves: List<Coordinate>
-) {
-    val start = Coordinate(0, 0) + moves.first()
-    val path = moves.drop(1).fold(listOf(start)) { acc, coordinate ->
-        acc + listOf(acc.last() + coordinate)
-    }
-
-    println("path = ")
-    path.chunked(10).forEach { println(it) }
-
-    val columns = keys.maxOf { it.first }
-    val rows = keys.maxOf { it.second }
-
-    for (row in 0..rows) {
-        for (column in 0..columns) {
-            when (val coordinate = column to row) {
-                in path -> {
-                    val index = path.indexOf(coordinate)
-                    when (moves.getOrNull(index)) {
-                        1 to 0 -> print(">")
-                        -1 to 0 -> print("<")
-                        0 to 1 -> print("v")
-                        0 to -1 -> print("^")
-                        null -> print(".")
-                    }
-                }
-
-                (0 to 0) -> {
-                    print("s")
-                }
-
-                else -> {
-                    print("${get(coordinate)}")
-                }
-            }
-        }
-        print("\n")
-    }
-}
-
-private fun Map<Coordinate, Int>.debugPrint(
-    nodes: List<Node>
-) {
-    val columns = keys.maxOf { it.first }
-    val rows = keys.maxOf { it.second }
-
-    for (row in 0..rows) {
-        for (column in 0..columns) {
-            val node = nodes.first { it.coordinate == column to row }
-            if (node.cost == MAX_COST) {
-                print("x,")
-            } else {
-                print("${node.cost},")
-            }
-
-        }
-        print("\n")
-    }
-    println("--------------------------------------------------")
 }
 
 private operator fun Pair<Int, Int>.plus(other: Pair<Int, Int>): Pair<Int, Int> {
